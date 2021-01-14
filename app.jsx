@@ -3,6 +3,15 @@
  * Editable content area for rich text formatting that converts the formatted
  * text into a JSON representation of the text.
  */
+
+/*
+- Brittle because it doesn't recognize other types (links, blockquotes, etc)
+- we COULD code it to recognize all this information, but it doesn't need to be that complex
+- remembering, only need the text and any sort of styling it might have
+- instead of walking down, maybe find the text and walk up?
+- have to account for edge cases (e.g. use of !important, other weird overrides)
+- another issue is that the nodes are not flat, so if the styler goes through once and doesn't find anything it likes, it stops
+*/
 import * as React from "react";
 import ContentEditable from "react-contenteditable";
 import JSONPretty from "react-json-pretty";
@@ -12,6 +21,25 @@ import styled from "styled-components";
 import Colors from "./constants/colors";
 import Spacing from "./constants/spacing";
 
+const TYPESTRING = "text";
+
+const parseNodesNew = (nodes, baseStyle = "normal") => {
+    let parsed = [];
+    console.log(nodes);
+    for (const node of nodes) {
+        const { attribs, children, data, name, type } = node;
+        // walk down the DOM tree until we find a text node
+        if (type === TYPESTRING) {
+            // found a string? go up the chain and see if there are any styles
+            baseStyle = !!attribs ? attribs.style : baseStyle; // caused a bug! attribs undefined before DOM is fully loaded!
+            parsed = parsed.concat({
+                style: baseStyle,
+                content: data
+            });
+        }
+    }
+    return parsed;
+};
 const parseNodes = (nodes, baseStyle = "normal") => {
     let parsed = [];
     for (const node of nodes) {
@@ -50,6 +78,9 @@ const parseNodes = (nodes, baseStyle = "normal") => {
             } else {
                 parsed = parsed.concat(parseNodes(children, "normal"));
             }
+        } else {
+            console.log("couldn't parse")
+            console.log(name);
         }
     }
     return parsed;
@@ -60,7 +91,7 @@ const parseHtml = (html) =>
         transform: (node, i) => {
             const { children, name, parent } = node;
             if (!parent && name === "div") {
-                const parsed = parseNodes(children);
+                const parsed = parseNodesNew(children);
                 return parsed.length > 0
                     ? {
                           content: parsed,
@@ -70,7 +101,7 @@ const parseHtml = (html) =>
                 return null;
             }
         },
-    }).filter((node) => !!node);
+    }).filter((node) => !!node); // qq: what's this boolean transform for?
 
 const App = () => {
     const [html, setHtml] = React.useState("<div>Edit text here.</div>");

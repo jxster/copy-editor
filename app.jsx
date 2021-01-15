@@ -11,6 +11,7 @@
 - instead of walking down, maybe find the text and walk up?
 - have to account for edge cases (e.g. use of !important, other weird overrides)
 - another issue is that the nodes are not flat, so if the styler goes through once and doesn't find anything it likes, it stops
+- additionally, using useEffect is probably not the hook we want to use, it triggers the parseNodes 3x
 */
 import * as React from "react";
 import ContentEditable from "react-contenteditable";
@@ -21,29 +22,36 @@ import styled from "styled-components";
 import Colors from "./constants/colors";
 import Spacing from "./constants/spacing";
 
-const TYPESTRING = "text";
+const TEXTSTRING = "text";
 
 const parseNodesNew = (nodes, baseStyle = "normal") => {
     let parsed = [];
-    console.log(nodes);
     for (const node of nodes) {
         const { attribs, children, data, name, type } = node;
-        // walk down the DOM tree until we find a text node
-        if (type === TYPESTRING) {
+        // check if node has text
+        if (type === TEXTSTRING && !!data.trim()) {
             // found a string? go up the chain and see if there are any styles
-            baseStyle = !!attribs ? attribs.style : baseStyle; // caused a bug! attribs undefined before DOM is fully loaded!
+            baseStyle = !!attribs ? attribs.style : baseStyle; // attribs undefined if text has no attributes (not before DOM loaded like I previously thought)
             parsed = parsed.concat({
-                style: baseStyle,
+                style: findStyle(baseStyle),
                 content: data
             });
-        }
+        } else if (!!children && children.length) {
+            // walk down the DOM tree to find text nodes
+            parsed = parsed.concat(parseNodesNew(children));
+        };
     }
     return parsed;
 };
+
+const findStyle = () => {
+
+}
+
 const parseNodes = (nodes, baseStyle = "normal") => {
     let parsed = [];
     for (const node of nodes) {
-        const { attribs, children, data, name } = node;
+        const { attribs, children, data, name, type } = node;
         if (!name) {
             parsed = parsed.concat({
                 style: baseStyle,
@@ -63,7 +71,7 @@ const parseNodes = (nodes, baseStyle = "normal") => {
                     baseStyle === "bold" ? "bold-italic" : "italic"
                 )
             );
-        } else if (name === "span") {
+        } else if (type === "text") {
             const { style } = attribs;
             // The detection of attributes here might be too specific. Is this
             // really the best way to do this?
@@ -104,7 +112,9 @@ const parseHtml = (html) =>
     }).filter((node) => !!node); // qq: what's this boolean transform for?
 
 const App = () => {
-    const [html, setHtml] = React.useState("<div>Edit text here.</div>");
+    const [html, setHtml] = React.useState(
+        "<div><p><b>Edit</b> <i>text</i> here.</p><ul><li>This a list item</li><li><span style='font-weight: bold'>Hello thar</span></li></ul><blockquote style='font-weight: 450; font-style: italic'>This is a quote</blockquote></div>"
+    );
     const [parsed, setParsed] = React.useState(parseHtml(html));
 
     const handleChange = (e) => {

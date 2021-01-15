@@ -23,30 +23,44 @@ import Colors from "./constants/colors";
 import Spacing from "./constants/spacing";
 
 const TEXTSTRING = "text";
+const boldStrings = ['bold', 'bolder'];
 
-const parseNodesNew = (nodes, baseStyle = "normal") => {
-    let parsed = [];
-    for (const node of nodes) {
-        const { attribs, children, data, name, type } = node;
-        // check if node has text
-        if (type === TEXTSTRING && !!data.trim()) {
-            // found a string? go up the chain and see if there are any styles
-            baseStyle = !!attribs ? attribs.style : baseStyle; // attribs undefined if text has no attributes (not before DOM loaded like I previously thought)
-            parsed = parsed.concat({
-                style: findStyle(baseStyle),
-                content: data
-            });
-        } else if (!!children && children.length) {
-            // walk down the DOM tree to find text nodes
-            parsed = parsed.concat(parseNodesNew(children));
-        };
-    }
-    return parsed;
-};
+// const parseNodesNew = (nodes, baseStyle = "normal") => {
+//     let parsed = [];
+//     for (const node of nodes) {
+//         const { attribs, children, data, name, type, parent } = node;
+//         // check if node has text
+//         if (type === TEXTSTRING && !!data.trim()) {
+//             // found a string? go up the chain and see if there are any styles
+//             parsed = parsed.concat({
+//                 style: findStyle(attribs, parent) || baseStyle,
+//                 content: data
+//             });
+//         } else if (!!children && children.length) {
+//             // walk down the DOM tree to find text nodes
+//             parsed = parsed.concat(parseNodesNew(children));
+//         };
+//     }
+//     return parsed;
+// };
 
-const findStyle = () => {
-
-}
+// const findStyle = (attributes, parentNode) => {
+//     if (!attributes) {
+//         const { name:parentName } = parentNode;
+//         console.log('hello')
+//         switch (parentName) {
+//             case "b":
+//                 return "bold";
+//             case "i":
+//                 return "italic";
+//             default:
+//                 return null;
+//         }
+//         return findStyle(parentNode.attribs, parentNode.parent);
+//     } else if (attributes.style) {
+//         return attributes.style;
+//     }
+// }
 
 const parseNodes = (nodes, baseStyle = "normal") => {
     let parsed = [];
@@ -71,35 +85,44 @@ const parseNodes = (nodes, baseStyle = "normal") => {
                     baseStyle === "bold" ? "bold-italic" : "italic"
                 )
             );
-        } else if (type === "text") {
-            const { style } = attribs;
+        } else {
+            const style = !!attribs.style ? attribs.style : "";
             // The detection of attributes here might be too specific. Is this
             // really the best way to do this?
             const isItalic = !!style.match(/italic/);
-            const isBold = !!style.match(/weight:600/);
+            const isBold = determineBold(style);
             if (isItalic && !isBold) {
                 parsed = parsed.concat(parseNodes(children, "italic"));
             } else if (!isItalic && isBold) {
                 parsed = parsed.concat(parseNodes(children, "bold"));
             } else if (isItalic && isBold) {
                 parsed = parsed.concat(parseNodes(children, "bold-italic"));
-            } else {
+            } 
+            else {
                 parsed = parsed.concat(parseNodes(children, "normal"));
             }
-        } else {
-            console.log("couldn't parse")
-            console.log(name);
         }
     }
     return parsed;
 };
+
+const determineBold = (style) => {
+    // this is messy, but checks for both bold in numerical weight + if defined by string
+    if (style.match(/font-weight/)) {
+        const fontWeight = style.match(/font-weight:\s*\d+/) || style.match(/font-weight:\s*\w+/);
+        const weightValue = fontWeight[0].split(':')[1]
+        if (parseInt(weightValue) && parseInt(weightValue) > 400 || boldStrings.includes(weightValue.trim().toLowerCase())) {
+            return "bold";
+        }
+    }
+}
 
 const parseHtml = (html) =>
     ReactHtmlParser(html, {
         transform: (node, i) => {
             const { children, name, parent } = node;
             if (!parent && name === "div") {
-                const parsed = parseNodesNew(children);
+                const parsed = parseNodes(children);
                 return parsed.length > 0
                     ? {
                           content: parsed,
@@ -113,7 +136,7 @@ const parseHtml = (html) =>
 
 const App = () => {
     const [html, setHtml] = React.useState(
-        "<div><p><b>Edit</b> <i>text</i> here.</p><ul><li>This a list item</li><li><span style='font-weight: bold'>Hello thar</span></li></ul><blockquote style='font-weight: 450; font-style: italic'>This is a quote</blockquote></div>"
+        "<div><p><b>Edit</b><i> text </i>here.</p><ul><li>This a list item</li><li><span style='font-weight: bold'>Hello there</span></li></ul><blockquote style='font-weight: 450; font-style: italic'>This is a quote</blockquote></div>"
     );
     const [parsed, setParsed] = React.useState(parseHtml(html));
 
